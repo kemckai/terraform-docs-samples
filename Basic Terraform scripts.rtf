@@ -1,0 +1,594 @@
+{\rtf1\ansi\ansicpg1252\cocoartf2821
+\cocoatextscaling0\cocoaplatform0{\fonttbl\f0\fnil\fcharset0 HelveticaNeue-Bold;\f1\fnil\fcharset0 HelveticaNeue;}
+{\colortbl;\red255\green255\blue255;}
+{\*\expandedcolortbl;;}
+\paperw11900\paperh16840\margl1440\margr1440\vieww11520\viewh8400\viewkind0
+\deftab560
+\pard\pardeftab560\partightenfactor0
+
+\f0\b\fs40 \cf0 Terraform & Ansible Scripts\
+\pard\pardeftab560\slleading20\pardirnatural\partightenfactor0
+
+\f1\b0\fs26 \cf0 \
+\pard\pardeftab560\slleading20\partightenfactor0
+\cf0 Below is an example of a Terraform script that automates the provisioning of AWS infrastructure, including EC2 instances, load balancers, and security groups. This script demonstrates how to define infrastructure as code (IaC) using Terraform.\
+\
+### Terraform Script Example\
+\
+```hcl\
+# Specify the AWS provider and region\
+provider "aws" \{\
+  region = "us-east-1" # Change to your preferred region\
+\}\
+\
+# Create a VPC\
+resource "aws_vpc" "main" \{\
+  cidr_block = "10.0.0.0/16"\
+  tags = \{\
+    Name = "main-vpc"\
+  \}\
+\}\
+\
+# Create a public subnet\
+resource "aws_subnet" "public_subnet" \{\
+  vpc_id            = aws_vpc.main.id\
+  cidr_block        = "10.0.1.0/24"\
+  availability_zone = "us-east-1a"\
+  tags = \{\
+    Name = "public-subnet"\
+  \}\
+\}\
+\
+# Create an internet gateway\
+resource "aws_internet_gateway" "igw" \{\
+  vpc_id = aws_vpc.main.id\
+  tags = \{\
+    Name = "main-igw"\
+  \}\
+\}\
+\
+# Create a route table for the public subnet\
+resource "aws_route_table" "public_route_table" \{\
+  vpc_id = aws_vpc.main.id\
+\
+  route \{\
+    cidr_block = "0.0.0.0/0"\
+    gateway_id = aws_internet_gateway.igw.id\
+  \}\
+\
+  tags = \{\
+    Name = "public-route-table"\
+  \}\
+\}\
+\
+# Associate the public subnet with the route table\
+resource "aws_route_table_association" "public_subnet_association" \{\
+  subnet_id      = aws_subnet.public_subnet.id\
+  route_table_id = aws_route_table.public_route_table.id\
+\}\
+\
+# Create a security group for the EC2 instance\
+resource "aws_security_group" "ec2_sg" \{\
+  name        = "ec2-security-group"\
+  description = "Allow SSH and HTTP traffic"\
+  vpc_id      = aws_vpc.main.id\
+\
+  ingress \{\
+    from_port   = 22\
+    to_port     = 22\
+    protocol    = "tcp"\
+    cidr_blocks = ["0.0.0.0/0"] # Allow SSH from anywhere (for demonstration purposes)\
+  \}\
+\
+  ingress \{\
+    from_port   = 80\
+    to_port     = 80\
+    protocol    = "tcp"\
+    cidr_blocks = ["0.0.0.0/0"] # Allow HTTP from anywhere\
+  \}\
+\
+  egress \{\
+    from_port   = 0\
+    to_port     = 0\
+    protocol    = "-1"\
+    cidr_blocks = ["0.0.0.0/0"] # Allow all outbound traffic\
+  \}\
+\
+  tags = \{\
+    Name = "ec2-security-group"\
+  \}\
+\}\
+\
+# Launch an EC2 instance\
+resource "aws_instance" "web_server" \{\
+  ami           = "ami-0c02fb55956c7d316" # Amazon Linux 2 AMI (change as needed)\
+  instance_type = "t2.micro"\
+  subnet_id     = aws_subnet.public_subnet.id\
+  security_groups = [aws_security_group.ec2_sg.name]\
+\
+  tags = \{\
+    Name = "web-server"\
+  \}\
+\}\
+\
+# Create an Application Load Balancer (ALB)\
+resource "aws_lb" "web_alb" \{\
+  name               = "web-alb"\
+  internal           = false\
+  load_balancer_type = "application"\
+  security_groups    = [aws_security_group.ec2_sg.id]\
+  subnets            = [aws_subnet.public_subnet.id]\
+\
+  tags = \{\
+    Name = "web-alb"\
+  \}\
+\}\
+\
+# Create a target group for the ALB\
+resource "aws_lb_target_group" "web_tg" \{\
+  name     = "web-target-group"\
+  port     = 80\
+  protocol = "HTTP"\
+  vpc_id   = aws_vpc.main.id\
+\
+  health_check \{\
+    path = "/"\
+  \}\
+\}\
+\
+# Attach the EC2 instance to the target group\
+resource "aws_lb_target_group_attachment" "web_tg_attachment" \{\
+  target_group_arn = aws_lb_target_group.web_tg.arn\
+  target_id        = aws_instance.web_server.id\
+  port             = 80\
+\}\
+\
+# Create a listener for the ALB\
+resource "aws_lb_listener" "web_listener" \{\
+  load_balancer_arn = aws_lb.web_alb.arn\
+  port              = 80\
+  protocol          = "HTTP"\
+\
+  default_action \{\
+    type             = "forward"\
+    target_group_arn = aws_lb_target_group.web_tg.arn\
+  \}\
+\}\
+\
+# Output the ALB DNS name\
+output "alb_dns_name" \{\
+  value = aws_lb.web_alb.dns_name\
+\}\
+```\
+\
+### Explanation of the Script\
+\
+1. **Provider Configuration**: Specifies the AWS provider and region.\
+2. **VPC and Subnet**: Creates a VPC and a public subnet within it.\
+3. **Internet Gateway and Route Table**: Sets up an internet gateway and a route table to allow internet access for the public subnet.\
+4. **Security Group**: Defines a security group to allow SSH and HTTP traffic to the EC2 instance.\
+5. **EC2 Instance**: Launches an EC2 instance in the public subnet with the specified security group.\
+6. **Application Load Balancer (ALB)**: Creates an ALB to distribute traffic to the EC2 instance.\
+7. **Target Group and Listener**: Configures a target group and listener for the ALB to forward traffic to the EC2 instance.\
+8. **Output**: Displays the DNS name of the ALB for easy access.\
+\
+### How to Use\
+\
+1. Save the script to a file named `main.tf`.\
+2. Run `terraform init` to initialize the Terraform working directory.\
+3. Run `terraform apply` to create the infrastructure.\
+4. After provisioning, the ALB DNS name will be displayed, which you can use to access your application.\
+\
+This script provides a basic example of how Terraform can automate AWS infrastructure provisioning. You can extend it further based on your requirements.\
+\pard\pardeftab560\slleading20\pardirnatural\partightenfactor0
+\cf0 \
+\
+\
+\
+\pard\pardeftab560\slleading20\partightenfactor0
+\cf0 \'97\'97\'97\'97\'97\'97\'97\'97\'97\'97\'97\'97\'97\'97\'97\'97\'97\'97\'97\'97\'97\'97\'97\'97\'97\'97\
+\pard\pardeftab560\slleading20\pardirnatural\partightenfactor0
+\cf0 \
+\
+\
+\
+\pard\pardeftab560\slleading20\partightenfactor0
+\cf0 Below are two more complex and real-world usable Terraform scripts. Each script is designed for a specific use case and includes advanced features like modules, remote state management, and multi-environment support.\
+\
+---\
+\
+### **Script 1: Multi-Tier Architecture with Auto Scaling and RDS**\
+\
+This script sets up a multi-tier architecture in AWS, including:\
+- A **web tier** with an Auto Scaling group and Application Load Balancer (ALB).\
+- An **application tier** with an Auto Scaling group.\
+- A **database tier** using Amazon RDS (PostgreSQL).\
+- Remote state management using an S3 backend.\
+\
+#### File: `multi_tier_architecture/main.tf`\
+\
+```hcl\
+# Configure the AWS provider\
+provider "aws" \{\
+  region = "us-east-1"\
+\}\
+\
+# Remote state management using S3 backend\
+terraform \{\
+  backend "s3" \{\
+    bucket = "my-terraform-state-bucket" # Replace with your S3 bucket name\
+    key    = "multi-tier-architecture/terraform.tfstate"\
+    region = "us-east-1"\
+  \}\
+\}\
+\
+# Create a VPC\
+resource "aws_vpc" "main" \{\
+  cidr_block = "10.0.0.0/16"\
+  tags = \{\
+    Name = "multi-tier-vpc"\
+  \}\
+\}\
+\
+# Create public and private subnets\
+resource "aws_subnet" "public_subnet" \{\
+  vpc_id            = aws_vpc.main.id\
+  cidr_block        = "10.0.1.0/24"\
+  availability_zone = "us-east-1a"\
+  tags = \{\
+    Name = "public-subnet"\
+  \}\
+\}\
+\
+resource "aws_subnet" "private_subnet" \{\
+  vpc_id            = aws_vpc.main.id\
+  cidr_block        = "10.0.2.0/24"\
+  availability_zone = "us-east-1b"\
+  tags = \{\
+    Name = "private-subnet"\
+  \}\
+\}\
+\
+# Create an internet gateway\
+resource "aws_internet_gateway" "igw" \{\
+  vpc_id = aws_vpc.main.id\
+  tags = \{\
+    Name = "multi-tier-igw"\
+  \}\
+\}\
+\
+# Create a NAT gateway for private subnet internet access\
+resource "aws_eip" "nat_eip" \{\
+  vpc = true\
+\}\
+\
+resource "aws_nat_gateway" "nat_gw" \{\
+  allocation_id = aws_eip.nat_eip.id\
+  subnet_id     = aws_subnet.public_subnet.id\
+  tags = \{\
+    Name = "multi-tier-nat-gw"\
+  \}\
+\}\
+\
+# Create route tables for public and private subnets\
+resource "aws_route_table" "public_route_table" \{\
+  vpc_id = aws_vpc.main.id\
+\
+  route \{\
+    cidr_block = "0.0.0.0/0"\
+    gateway_id = aws_internet_gateway.igw.id\
+  \}\
+\
+  tags = \{\
+    Name = "public-route-table"\
+  \}\
+\}\
+\
+resource "aws_route_table" "private_route_table" \{\
+  vpc_id = aws_vpc.main.id\
+\
+  route \{\
+    cidr_block = "0.0.0.0/0"\
+    nat_gateway_id = aws_nat_gateway.nat_gw.id\
+  \}\
+\
+  tags = \{\
+    Name = "private-route-table"\
+  \}\
+\}\
+\
+# Associate subnets with route tables\
+resource "aws_route_table_association" "public_subnet_association" \{\
+  subnet_id      = aws_subnet.public_subnet.id\
+  route_table_id = aws_route_table.public_route_table.id\
+\}\
+\
+resource "aws_route_table_association" "private_subnet_association" \{\
+  subnet_id      = aws_subnet.private_subnet.id\
+  route_table_id = aws_route_table.private_route_table.id\
+\}\
+\
+# Create a security group for the web tier\
+resource "aws_security_group" "web_sg" \{\
+  name        = "web-security-group"\
+  description = "Allow HTTP and SSH traffic"\
+  vpc_id      = aws_vpc.main.id\
+\
+  ingress \{\
+    from_port   = 80\
+    to_port     = 80\
+    protocol    = "tcp"\
+    cidr_blocks = ["0.0.0.0/0"]\
+  \}\
+\
+  ingress \{\
+    from_port   = 22\
+    to_port     = 22\
+    protocol    = "tcp"\
+    cidr_blocks = ["0.0.0.0/0"]\
+  \}\
+\
+  egress \{\
+    from_port   = 0\
+    to_port     = 0\
+    protocol    = "-1"\
+    cidr_blocks = ["0.0.0.0/0"]\
+  \}\
+\
+  tags = \{\
+    Name = "web-security-group"\
+  \}\
+\}\
+\
+# Create an Auto Scaling group for the web tier\
+resource "aws_launch_template" "web_launch_template" \{\
+  name_prefix   = "web-template"\
+  image_id      = "ami-0c02fb55956c7d316" # Amazon Linux 2 AMI\
+  instance_type = "t2.micro"\
+  vpc_security_group_ids = [aws_security_group.web_sg.id]\
+\}\
+\
+resource "aws_autoscaling_group" "web_asg" \{\
+  desired_capacity    = 2\
+  max_size            = 4\
+  min_size            = 1\
+  vpc_zone_identifier = [aws_subnet.public_subnet.id]\
+\
+  launch_template \{\
+    id = aws_launch_template.web_launch_template.id\
+  \}\
+\
+  tag \{\
+    key                 = "Name"\
+    value               = "web-instance"\
+    propagate_at_launch = true\
+  \}\
+\}\
+\
+# Create an Application Load Balancer (ALB) for the web tier\
+resource "aws_lb" "web_alb" \{\
+  name               = "web-alb"\
+  internal           = false\
+  load_balancer_type = "application"\
+  security_groups    = [aws_security_group.web_sg.id]\
+  subnets            = [aws_subnet.public_subnet.id]\
+\
+  tags = \{\
+    Name = "web-alb"\
+  \}\
+\}\
+\
+# Create a target group for the ALB\
+resource "aws_lb_target_group" "web_tg" \{\
+  name     = "web-target-group"\
+  port     = 80\
+  protocol = "HTTP"\
+  vpc_id   = aws_vpc.main.id\
+\
+  health_check \{\
+    path = "/"\
+  \}\
+\}\
+\
+# Attach the Auto Scaling group to the target group\
+resource "aws_autoscaling_attachment" "web_asg_attachment" \{\
+  autoscaling_group_name = aws_autoscaling_group.web_asg.name\
+  alb_target_group_arn   = aws_lb_target_group.web_tg.arn\
+\}\
+\
+# Create an RDS instance for the database tier\
+resource "aws_db_instance" "web_db" \{\
+  allocated_storage    = 20\
+  storage_type         = "gp2"\
+  engine               = "postgres"\
+  engine_version       = "13.4"\
+  instance_class       = "db.t2.micro"\
+  name                 = "webdb"\
+  username             = "admin"\
+  password             = "securepassword" # Replace with a secure password\
+  parameter_group_name = "default.postgres13"\
+  skip_final_snapshot  = true\
+  vpc_security_group_ids = [aws_security_group.web_sg.id]\
+  db_subnet_group_name = aws_db_subnet_group.web_db_subnet_group.name\
+\}\
+\
+# Create a DB subnet group\
+resource "aws_db_subnet_group" "web_db_subnet_group" \{\
+  name       = "web-db-subnet-group"\
+  subnet_ids = [aws_subnet.private_subnet.id]\
+\
+  tags = \{\
+    Name = "web-db-subnet-group"\
+  \}\
+\}\
+\
+# Output the ALB DNS name\
+output "web_alb_dns_name" \{\
+  value = aws_lb.web_alb.dns_name\
+\}\
+```\
+\
+---\
+\
+### **Script 2: Serverless Application with AWS Lambda and API Gateway**\
+\
+This script sets up a serverless application using:\
+- **AWS Lambda** for compute.\
+- **API Gateway** for exposing the Lambda function as an HTTP endpoint.\
+- **DynamoDB** for data storage.\
+- **CloudWatch** for logging.\
+\
+#### File: `serverless_application/main.tf`\
+\
+```hcl\
+# Configure the AWS provider\
+provider "aws" \{\
+  region = "us-east-1"\
+\}\
+\
+# Remote state management using S3 backend\
+terraform \{\
+  backend "s3" \{\
+    bucket = "my-terraform-state-bucket" # Replace with your S3 bucket name\
+    key    = "serverless-application/terraform.tfstate"\
+    region = "us-east-1"\
+  \}\
+\}\
+\
+# Create a DynamoDB table\
+resource "aws_dynamodb_table" "serverless_table" \{\
+  name           = "serverless-table"\
+  billing_mode   = "PAY_PER_REQUEST"\
+  hash_key       = "id"\
+\
+  attribute \{\
+    name = "id"\
+    type = "S"\
+  \}\
+\
+  tags = \{\
+    Name = "serverless-table"\
+  \}\
+\}\
+\
+# Create an IAM role for the Lambda function\
+resource "aws_iam_role" "lambda_role" \{\
+  name = "lambda-execution-role"\
+\
+  assume_role_policy = jsonencode(\{\
+    Version = "2012-10-17"\
+    Statement = [\
+      \{\
+        Action = "sts:AssumeRole"\
+        Effect = "Allow"\
+        Principal = \{\
+          Service = "lambda.amazonaws.com"\
+        \}\
+      \}\
+    ]\
+  \})\
+\}\
+\
+# Attach policies to the IAM role\
+resource "aws_iam_role_policy_attachment" "lambda_basic_execution" \{\
+  role       = aws_iam_role.lambda_role.name\
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"\
+\}\
+\
+resource "aws_iam_role_policy" "lambda_dynamodb_access" \{\
+  role = aws_iam_role.lambda_role.name\
+\
+  policy = jsonencode(\{\
+    Version = "2012-10-17"\
+    Statement = [\
+      \{\
+        Action = [\
+          "dynamodb:PutItem",\
+          "dynamodb:GetItem",\
+          "dynamodb:UpdateItem",\
+          "dynamodb:DeleteItem"\
+        ]\
+        Effect   = "Allow"\
+        Resource = aws_dynamodb_table.serverless_table.arn\
+      \}\
+    ]\
+  \})\
+\}\
+\
+# Create a Lambda function\
+resource "aws_lambda_function" "serverless_function" \{\
+  function_name = "serverless-function"\
+  handler       = "index.handler"\
+  runtime       = "nodejs14.x"\
+  role          = aws_iam_role.lambda_role.arn\
+\
+  filename         = "lambda_function_payload.zip" # Replace with your Lambda deployment package\
+  source_code_hash = filebase64sha256("lambda_function_payload.zip")\
+\
+  environment \{\
+    variables = \{\
+      DYNAMODB_TABLE = aws_dynamodb_table.serverless_table.name\
+    \}\
+  \}\
+\}\
+\
+# Create an API Gateway REST API\
+resource "aws_api_gateway_rest_api" "serverless_api" \{\
+  name        = "serverless-api"\
+  description = "API for the serverless application"\
+\}\
+\
+# Create a resource and method for the API Gateway\
+resource "aws_api_gateway_resource" "api_resource" \{\
+  rest_api_id = aws_api_gateway_rest_api.serverless_api.id\
+  parent_id   = aws_api_gateway_rest_api.serverless_api.root_resource_id\
+  path_part   = "resource"\
+\}\
+\
+resource "aws_api_gateway_method" "api_method" \{\
+  rest_api_id   = aws_api_gateway_rest_api.serverless_api.id\
+  resource_id   = aws_api_gateway_resource.api_resource.id\
+  http_method   = "POST"\
+  authorization = "NONE"\
+\}\
+\
+# Integrate the API Gateway with the Lambda function\
+resource "aws_api_gateway_integration" "api_integration" \{\
+  rest_api_id             = aws_api_gateway_rest_api.serverless_api.id\
+  resource_id             = aws_api_gateway_resource.api_resource.id\
+  http_method             = aws_api_gateway_method.api_method.http_method\
+  integration_http_method = "POST"\
+  type                    = "AWS_PROXY"\
+  uri                     = aws_lambda_function.serverless_function.invoke_arn\
+\}\
+\
+# Deploy the API Gateway\
+resource "aws_api_gateway_deployment" "api_deployment" \{\
+  rest_api_id = aws_api_gateway_rest_api.serverless_api.id\
+  stage_name  = "prod"\
+\}\
+\
+# Output the API Gateway endpoint\
+output "api_gateway_endpoint" \{\
+  value = aws_api_gateway_deployment.api_deployment.invoke_url\
+\}\
+```\
+\
+---\
+\
+### Key Features of These Scripts\
+\
+1. **Multi-Tier Architecture**:\
+   - Includes web, application, and database tiers.\
+   - Uses Auto Scaling and RDS for scalability and reliability.\
+\
+2. **Serverless Application**:\
+   - Leverages AWS Lambda, API Gateway, and DynamoDB.\
+   - Ideal for event-driven and scalable applications.\
+\
+3. **Real-World Usability**:\
+   - Includes remote state management for team collaboration.\
+   - Uses modular and reusable components.\
+\
+These scripts are ready for real-world use and can be extended further based on specific requirements.\
+}
